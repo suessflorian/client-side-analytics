@@ -41,7 +41,7 @@ func generator(ctx context.Context, lg *logrus.Logger, connector *duckdb.Connect
 		if err != nil {
 			return nil, fmt.Errorf("failed to append row: %w", err)
 		}
-		go diagnostics.DiagnosticsFromContext(ctx).Add(DIAGNOSTIC_GENERATED_PRODUCTS, 1)
+		diagnostics.DiagnosticsFromContext(ctx).Add(DIAGNOSTIC_GENERATED_PRODUCTS, 1)
 	}
 
 	return res, nil

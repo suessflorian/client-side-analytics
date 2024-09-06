@@ -23,37 +23,39 @@ func Begin(ctx context.Context, lg *logrus.Logger) *diagnostics {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 
-		select {
-		case <-ticker.C:
-			lg.WithFields(logrus.Fields{
-				"set_update_queue": len(diagnostics.set),
-				"add_update_queue": len(diagnostics.add),
-			}).Debug("processing diagnostic updates")
+		for {
+			select {
+			case <-ticker.C:
+				lg.WithFields(logrus.Fields{
+					"set_update_queue": len(diagnostics.set),
+					"add_update_queue": len(diagnostics.add),
+				}).Debug("processing diagnostic updates")
 
-			var addUpdateBatch []update
-			for i := 0; i < bound; i++ {
-				select {
-				case update := <-diagnostics.add:
-					addUpdateBatch = append(addUpdateBatch, update)
-				default:
-					break
+				var addUpdateBatch []update
+				for i := 0; i < bound; i++ {
+					select {
+					case update := <-diagnostics.add:
+						addUpdateBatch = append(addUpdateBatch, update)
+					default:
+						break
+					}
 				}
-			}
-			diagnostics.processAddUpdates(addUpdateBatch...)
+				diagnostics.processAddUpdates(addUpdateBatch...)
 
-			var setUpdateBatch []update
-			for i := 0; i < bound; i++ {
-				select {
-				case update := <-diagnostics.set:
-					setUpdateBatch = append(setUpdateBatch, update)
-				default:
-					break
+				var setUpdateBatch []update
+				for i := 0; i < bound; i++ {
+					select {
+					case update := <-diagnostics.set:
+						setUpdateBatch = append(setUpdateBatch, update)
+					default:
+						break
+					}
 				}
+				diagnostics.processSetUpdates(setUpdateBatch...)
+				lg.Debug("batch of diagnostic updates processed")
+			case <-ctx.Done():
+				return
 			}
-			diagnostics.processSetUpdates(setUpdateBatch...)
-			lg.Debug("batch of updates processed")
-		case <-ctx.Done():
-			return
 		}
 	}()
 
@@ -114,10 +116,15 @@ func (d *diagnostics) processAddUpdates(batch ...update) {
 			}
 		} else {
 			last := d.metrics[update.label][len(d.metrics[update.label])-1]
-			d.metrics[update.label] = append(
-				d.metrics[update.label],
-				point{Time: update.Time, Value: last.Value + update.Value},
-			)
+			if squash(last.Time, update.Time) {
+				d.metrics[update.label][len(d.metrics[update.label])-1] = point{
+					Value: last.Value + update.Value, Time: last.Time}
+			} else {
+				d.metrics[update.label] = append(
+					d.metrics[update.label],
+					point{Time: update.Time, Value: last.Value + update.Value},
+				)
+			}
 		}
 	}
 }
@@ -129,13 +136,27 @@ func (d *diagnostics) processSetUpdates(batch ...update) {
 	for _, update := range batch {
 		_, ok := d.metrics[update.label]
 		if !ok {
-			d.metrics[update.label] = make([]point, 0, 1)
+			d.metrics[update.label] = []point{
+				{Time: update.Time, Value: update.Value},
+			}
+		} else {
+			last := d.metrics[update.label][len(d.metrics[update.label])-1]
+			if squash(last.Time, update.Time) {
+				d.metrics[update.label][len(d.metrics[update.label])-1] = point{
+					Value: update.Value, Time: last.Time}
+			} else {
+				d.metrics[update.label] = append(
+					d.metrics[update.label],
+					point{Time: update.Time, Value: update.Value},
+				)
+			}
 		}
-		d.metrics[update.label] = append(
-			d.metrics[update.label],
-			point{Time: update.Time, Value: update.Value},
-		)
 	}
+}
+
+func squash(t1, t2 time.Time) bool {
+	diff := t1.Sub(t2)
+	return diff < time.Millisecond && diff > -time.Millisecond
 }
 
 type contextKey struct{}

@@ -25,7 +25,7 @@ func main() {
 	}
 	defer connector.Close()
 
-	_, err = generator(ctx, lg, connector, 10_000)
+	_, err = generator(ctx, lg, connector, 1_000_000)
 	if err != nil {
 		lg.WithError(err).Fatal("failed to generate products")
 	}
