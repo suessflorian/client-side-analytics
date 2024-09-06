@@ -17,7 +17,7 @@ func Begin(ctx context.Context, lg *logrus.Logger) *diagnostics {
 		queue:        make(chan update, 10_000_000),
 	}
 
-	bound := 1_000_000
+	bound := 10_000_000
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
@@ -59,20 +59,8 @@ func DiagnosticsFromContext(ctx context.Context) *diagnostics {
 	return ctx.Value(contextKey{}).(*diagnostics)
 }
 
-func (d *diagnostics) Set(label string, value int) {
+func (d *diagnostics) Set(label string, value any) {
 	d.queue <- update{
-		operation: "SET",
-		point: point{
-			Time:  time.Now(),
-			Value: value,
-		},
-		label: label,
-	}
-}
-
-func (d *diagnostics) Add(label string, value int) {
-	d.queue <- update{
-		operation: "ADD",
 		point: point{
 			Time:  time.Now(),
 			Value: value,
@@ -106,29 +94,15 @@ func (d *diagnostics) process(batch ...update) {
 				{Time: update.Time, Value: update.Value},
 			}
 		} else {
-			switch update.operation {
-			case "ADD":
-				last := d.metrics[update.label][len(d.metrics[update.label])-1]
-				if squash(last.Time, update.Time) {
-					d.metrics[update.label][len(d.metrics[update.label])-1] = point{
-						Value: last.Value + update.Value, Time: last.Time}
-				} else {
-					d.metrics[update.label] = append(
-						d.metrics[update.label],
-						point{Time: update.Time, Value: last.Value + update.Value},
-					)
-				}
-			case "SET":
-				last := d.metrics[update.label][len(d.metrics[update.label])-1]
-				if squash(last.Time, update.Time) {
-					d.metrics[update.label][len(d.metrics[update.label])-1] = point{
-						Value: update.Value, Time: last.Time}
-				} else {
-					d.metrics[update.label] = append(
-						d.metrics[update.label],
-						point{Time: update.Time, Value: update.Value},
-					)
-				}
+			last := d.metrics[update.label][len(d.metrics[update.label])-1]
+			if squash(last.Time, update.Time) {
+				d.metrics[update.label][len(d.metrics[update.label])-1] = point{
+					Value: update.Value, Time: last.Time}
+			} else {
+				d.metrics[update.label] = append(
+					d.metrics[update.label],
+					point{Time: update.Time, Value: update.Value},
+				)
 			}
 		}
 	}
@@ -149,11 +123,10 @@ type diagnostics struct {
 
 type point struct {
 	Time  time.Time `json:"time"`
-	Value int       `json:"value"`
+	Value any       `json:"value"`
 }
 
 type update struct {
 	point
-	label     string
-	operation string // TODO: ADD OR SET consts
+	label string
 }

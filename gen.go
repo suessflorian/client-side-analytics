@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DIAGNOSTIC_GENERATED_PRODUCTS = "generated_products"
+	DIAGNOSTIC_GENERATED_PRODUCTS = "Generated products"
 )
 
 func generator(ctx context.Context, lg *logrus.Logger, connector *duckdb.Connector, amount int) ([]uuid.UUID, error) {
@@ -33,6 +33,7 @@ func generator(ctx context.Context, lg *logrus.Logger, connector *duckdb.Connect
 	}
 	defer appender.Close()
 
+  generated := 0
 	for i := 0; i < amount; i++ {
 		res = append(res, uuid.New())
 		uuid := duckdb.UUID{}
@@ -41,7 +42,8 @@ func generator(ctx context.Context, lg *logrus.Logger, connector *duckdb.Connect
 		if err != nil {
 			return nil, fmt.Errorf("failed to append row: %w", err)
 		}
-		diagnostics.DiagnosticsFromContext(ctx).Add(DIAGNOSTIC_GENERATED_PRODUCTS, 1)
+    generated++
+		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_PRODUCTS, generated)
 	}
 
 	return res, nil
