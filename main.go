@@ -6,13 +6,18 @@ import (
 	"net/http"
 
 	"github.com/sirupsen/logrus"
+	"github.com/suessflorian/client-side-analytics/diagnostics"
 	"github.com/suessflorian/client-side-analytics/store/duckdb"
 )
 
 func main() {
 	ctx := context.Background()
 	lg := logrus.New()
+	lg.SetLevel(logrus.DebugLevel)
 	lg.SetFormatter(&logrus.JSONFormatter{})
+
+	d := diagnostics.Begin(ctx, lg)
+	ctx = diagnostics.ContextWithDiagnostics(ctx, d)
 
 	connector, err := duckdb.Init(ctx, lg, "duck.db")
 	if err != nil {
@@ -20,12 +25,13 @@ func main() {
 	}
 	defer connector.Close()
 
-	_, err = generator(ctx, lg, connector, 10_000_000)
+	_, err = generator(ctx, lg, connector, 10_000)
 	if err != nil {
 		lg.WithError(err).Fatal("failed to generate products")
 	}
 
 	http.HandleFunc("/", homeHandler)
+	http.HandleFunc("/diagnostics", d.MetricsHandler)
 	http.HandleFunc("/script.js", scriptHandler)
 
 	lg.Info("⚡️ http://localhost:8080 ⚡️")
