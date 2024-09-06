@@ -9,7 +9,16 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const [key, value] of Object.entries(data)) {
         const latest = value[value.length - 1]
         const p = document.createElement('p');
-        p.textContent = `${key}: ${latest.value}`;
+        switch (latest.value) {
+          case false:
+            continue
+          case true:
+            p.textContent = `${key}...`;
+            break
+          default:
+            p.textContent = `${key}: ${latest.value}`;
+            break
+        }
         diagnostics.appendChild(p);
       }
     } else {

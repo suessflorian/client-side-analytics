@@ -13,6 +13,7 @@ import (
 
 const (
 	DIAGNOSTIC_GENERATED_PRODUCTS = "Generated products"
+	DIAGNOSTIC_FLUSHING           = "Flushing products to disk"
 )
 
 func generator(ctx context.Context, lg *logrus.Logger, connector *duckdb.Connector, amount int) ([]uuid.UUID, error) {
@@ -31,9 +32,14 @@ func generator(ctx context.Context, lg *logrus.Logger, connector *duckdb.Connect
 	if err != nil {
 		return nil, fmt.Errorf("failed establish appender: %w", err)
 	}
-	defer appender.Close()
 
-  generated := 0
+	defer func() {
+		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_FLUSHING, true)
+		appender.Close()
+		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_FLUSHING, false)
+	}()
+
+	generated := 0
 	for i := 0; i < amount; i++ {
 		res = append(res, uuid.New())
 		uuid := duckdb.UUID{}
@@ -42,7 +48,7 @@ func generator(ctx context.Context, lg *logrus.Logger, connector *duckdb.Connect
 		if err != nil {
 			return nil, fmt.Errorf("failed to append row: %w", err)
 		}
-    generated++
+		generated++
 		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_PRODUCTS, generated)
 	}
 
