@@ -25,10 +25,12 @@ func main() {
 	}
 	defer connector.Close()
 
-	_, err = generator(ctx, lg, connector, 1_000_000)
-	if err != nil {
-		lg.WithError(err).Fatal("failed to generate products")
-	}
+	go func() {
+		_, err = generator(ctx, lg, connector, 9_030_000)
+		if err != nil {
+			lg.WithError(err).Fatal("failed to generate products")
+		}
+	}()
 
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/diagnostics", d.MetricsHandler)
