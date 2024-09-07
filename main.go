@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	_ "embed"
+	"errors"
+	"net"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
@@ -36,8 +38,42 @@ func main() {
 	http.HandleFunc("/diagnostics", d.MetricsHandler)
 	http.HandleFunc("/script.js", scriptHandler)
 
-	lg.Info("⚡️ http://localhost:8080 ⚡️")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		lg.WithError(err).Info("well... something went wrong")
+	address, err := getLANIPAddress()
+	if err != nil {
+		if errors.Is(err, ErrNoLANIPAddressFound) {
+			lg.Info("no local ip address found", address)
+		} else {
+			lg.WithError(err).Error("failed to get LAN IP address")
+		}
+	} else {
+		go func() {
+			lg.Infof("⚡️ listening on http://%s:8080 ⚡️", address)
+			if err = http.ListenAndServe(":8080", nil); err != nil {
+				lg.WithError(err).Info("error starting network server")
+			}
+		}()
 	}
+
+	lg.Info("⚡️ listening on http://localhost:8080 ⚡️")
+	if err = http.ListenAndServe(":8080", nil); err != nil {
+		lg.WithError(err).Info("error starting localhost server")
+	}
+}
+
+var ErrNoLANIPAddressFound = errors.New("no local area network ip address found")
+
+func getLANIPAddress() (net.IP, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return net.IP{}, err
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP, nil
+			}
+		}
+	}
+	return net.IP{}, ErrNoLANIPAddressFound
 }
