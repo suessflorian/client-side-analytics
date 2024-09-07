@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"net"
 	"net/http"
@@ -28,15 +27,14 @@ func main() {
 	defer connector.Close()
 
 	go func() {
-		_, err = generator(ctx, lg, connector, 9_030_000)
-		if err != nil {
-			lg.WithError(err).Fatal("failed to generate products")
-		}
+		// _, err = generator(ctx, lg, connector, 10_000_000)
+		// if err != nil {
+		// 	lg.WithError(err).Fatal("failed to generate products")
+		// }
 	}()
 
-	http.HandleFunc("/", homeHandler)
+	http.Handle("/", http.FileServer(http.Dir("./static")))
 	http.HandleFunc("/diagnostics", d.MetricsHandler)
-	http.HandleFunc("/script.js", scriptHandler)
 
 	address, err := getLANIPAddress()
 	if err != nil {
@@ -46,12 +44,7 @@ func main() {
 			lg.WithError(err).Error("failed to get LAN IP address")
 		}
 	} else {
-		go func() {
-			lg.Infof("⚡️ listening on http://%s:8080 ⚡️", address)
-			if err = http.ListenAndServe(":8080", nil); err != nil {
-				lg.WithError(err).Info("error starting network server")
-			}
-		}()
+		lg.Infof("⚡️ listening on http://%s:8080 ⚡️", address)
 	}
 
 	lg.Info("⚡️ listening on http://localhost:8080 ⚡️")
