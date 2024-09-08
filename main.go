@@ -27,10 +27,9 @@ func main() {
 	defer connector.Close()
 
 	go func() {
-		// _, err = generator(ctx, lg, connector, 10_000_000)
-		// if err != nil {
-		// 	lg.WithError(err).Fatal("failed to generate products")
-		// }
+		if err = generator(ctx, lg, connector); err != nil {
+			lg.WithError(err).Fatal("failed to generate products")
+		}
 	}()
 
 	http.Handle("/", http.FileServer(http.Dir("./static")))
