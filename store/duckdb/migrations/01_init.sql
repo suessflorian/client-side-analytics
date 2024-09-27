@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS main.transactions (
 );
 
 CREATE TABLE IF NOT EXISTS main.transaction_lines (
+  id UUID PRIMARY KEY,
   transaction_id UUID REFERENCES main.transactions(id),
   product_id UUID REFERENCES main.products(id),
   quantity INTEGER,

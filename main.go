@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -35,12 +36,14 @@ func main() {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusBadRequest)
 		}
-		if err := g.create(ctx, lg, 1); err != nil {
+		generated, err := g.create(ctx, lg, 1)
+		if err != nil {
 			lg.WithError(err).Error("failed to generate artefacts")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(generated)
 	}))
 
 	http.Handle("/", http.FileServer(http.Dir("./static")))
