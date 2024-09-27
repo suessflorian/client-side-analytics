@@ -1,28 +1,33 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const diagnostics = document.getElementById('diagnostic-data');
+document.addEventListener("DOMContentLoaded", () => {
+  const diagnostics = document.getElementById("diagnostic-data");
   const pollDiagnostics = async () => {
-    const response = await fetch('/diagnostics');
+    const response = await fetch("/diagnostics");
     if (response.ok) {
       const data = await response.json();
-      diagnostics.innerHTML = '';
+      diagnostics.innerHTML = "";
 
       for (const [key, value] of Object.entries(data)) {
-        const latest = value[value.length - 1]
-        const p = document.createElement('p');
+        const latest = value[value.length - 1];
+        const p = document.createElement("p");
         switch (latest.value) {
           case false:
-            continue
+            continue;
           case true:
-            p.textContent = `${key}...`;
-            break
+            p.textContent = `Marked ${key}...`;
+            break;
           default:
-            p.textContent = `${key}: ${latest.value}`;
-            break
+            if (typeof latest.value === "number") {
+              p.textContent = `${key}: ${latest.value.toLocaleString()}`;
+            } else {
+              p.textContent = `${key}: ${latest.value}`;
+            }
+            break;
         }
+
         diagnostics.appendChild(p);
       }
     } else {
-      console.error('error fetching diagnostics data');
+      console.error("error fetching diagnostics data");
     }
   };
 
