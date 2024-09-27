@@ -14,7 +14,7 @@ import (
 func main() {
 	ctx := context.Background()
 	lg := logrus.New()
-	lg.SetLevel(logrus.DebugLevel)
+	lg.SetLevel(logrus.InfoLevel)
 	lg.SetFormatter(&logrus.JSONFormatter{})
 
 	d := diagnostics.Begin(ctx, lg)
@@ -26,8 +26,13 @@ func main() {
 	}
 	defer connector.Close()
 
+	g, err := newGenerator(ctx, connector)
+	if err != nil {
+		lg.WithError(err).Fatal("failed to initialise data generator")
+	}
+
 	go func() {
-		if err = generator(ctx, lg, connector); err != nil {
+		if err = g.create(ctx, lg, 1); err != nil {
 			lg.WithError(err).Fatal("failed to generate products")
 		}
 	}()

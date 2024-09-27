@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"database/sql/driver"
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"time"
@@ -20,44 +20,81 @@ const (
 	DIAGNOSTIC_GENERATED_MERCHANTS         = "Generated merchants"
 )
 
-func generator(ctx context.Context, lg *logrus.Logger, connector *duckdb.Connector) error {
-	conn, err := connector.Connect(ctx)
-	if err != nil {
-		return fmt.Errorf("could not connect: %w", err)
+type gen struct {
+	// stats keeps track of how many different entities have been generated.
+	stats struct {
+		merchants    int
+		products     int
+		transactions int
+		lines        int
 	}
-	defer conn.Close()
+	connector *duckdb.Connector
+}
 
-	merchants, err := generateMerchants(ctx, lg, conn, 1)
+func newGenerator(ctx context.Context, connector *duckdb.Connector) (*gen, error) {
+	g := &gen{connector: connector}
+
+	for table, count := range map[string]*int{
+		"merchants":         &g.stats.merchants,
+		"products":          &g.stats.products,
+		"transactions":      &g.stats.transactions,
+		"transaction_lines": &g.stats.lines,
+	} {
+		query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+		if err := sql.OpenDB(g.connector).QueryRowContext(ctx, query).Scan(count); err != nil {
+			return nil, fmt.Errorf("failed to get row count for table %s: %w", table, err)
+		}
+	}
+
+	diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_MERCHANTS, g.stats.merchants)
+	diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_PRODUCTS, g.stats.products)
+	diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_TRANSACTIONS, g.stats.transactions)
+	diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_TRANSACTION_LINES, g.stats.lines)
+
+	return g, nil
+}
+
+func (g *gen) create(ctx context.Context, lg *logrus.Logger, amount int) error {
+  lg.Info("generator running")
+
+	merchants, err := g.merchants(ctx, lg, amount)
 	if err != nil {
 		return err
 	}
 
 	for _, merchant := range merchants {
-		products, err := generateProducts(ctx, lg, conn, merchant, rand.Int()%100)
+		products, err := g.products(ctx, lg, merchant, rand.Int()%100)
 		if err != nil {
 			return err
 		}
 
-		transactions, err := generateTransactions(ctx, lg, conn, merchant, rand.Int()%100_000)
+		transactions, err := g.transactions(ctx, lg, merchant, rand.Int()%10_000)
 		if err != nil {
 			return err
 		}
 
-		err = generateTransactionLines(ctx, lg, conn, merchant, products, transactions, len(transactions)*7)
+		err = g.lines(ctx, lg, merchant, products, transactions, len(transactions)*7)
 		if err != nil {
 			return err
 		}
 	}
 
+  lg.Info("generator idle")
 	return nil
 }
 
-func generateMerchants(ctx context.Context, lg *logrus.Logger, conn driver.Conn, amount int) ([]uuid.UUID, error) {
+func (g *gen) merchants(ctx context.Context, lg *logrus.Logger, amount int) ([]uuid.UUID, error) {
+	conn, err := g.connector.Connect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not connect: %w", err)
+	}
+	defer conn.Close()
+
 	appender, err := duckdb.NewAppenderFromConn(conn, "", "merchants")
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish appender for merchants: %w", err)
 	}
-	defer lg.WithField("quantity", amount).Debug("generated merchants flushed to disk")
+	defer lg.WithField("quantity", amount).Info("flushing merchants to disk")
 	defer appender.Close()
 
 	var names = []string{
@@ -105,18 +142,25 @@ func generateMerchants(ctx context.Context, lg *logrus.Logger, conn driver.Conn,
 		); err != nil {
 			return nil, fmt.Errorf("failed to append merchant row: %w", err)
 		}
-		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_MERCHANTS, i+1)
+		g.stats.merchants++
+		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_MERCHANTS, g.stats.merchants)
 	}
 
 	return merchants, nil
 }
 
-func generateProducts(ctx context.Context, lg *logrus.Logger, conn driver.Conn, merchant uuid.UUID, amount int) ([]uuid.UUID, error) {
+func (g *gen) products(ctx context.Context, lg *logrus.Logger, merchant uuid.UUID, amount int) ([]uuid.UUID, error) {
+	conn, err := g.connector.Connect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not connect: %w", err)
+	}
+	defer conn.Close()
+
 	appender, err := duckdb.NewAppenderFromConn(conn, "", "products")
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish appender for products: %w", err)
 	}
-	defer lg.WithField("quantity", amount).Debug("generated products flushed to disk")
+	defer lg.WithField("quantity", amount).Info("flushing products to disk")
 	defer appender.Close()
 
 	var names = []string{
@@ -153,18 +197,25 @@ func generateProducts(ctx context.Context, lg *logrus.Logger, conn driver.Conn, 
 		); err != nil {
 			return nil, fmt.Errorf("failed to append product row: %w", err)
 		}
-		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_PRODUCTS, i+1)
+		g.stats.products++
+		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_PRODUCTS, g.stats.products)
 	}
 
 	return products, nil
 }
 
-func generateTransactions(ctx context.Context, lg *logrus.Logger, conn driver.Conn, merchant uuid.UUID, amount int) ([]uuid.UUID, error) {
+func (g *gen) transactions(ctx context.Context, lg *logrus.Logger, merchant uuid.UUID, amount int) ([]uuid.UUID, error) {
+	conn, err := g.connector.Connect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not connect: %w", err)
+	}
+	defer conn.Close()
+
 	appender, err := duckdb.NewAppenderFromConn(conn, "", "transactions")
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish appender for transactions: %w", err)
 	}
-	defer lg.WithField("quantity", amount).Debug("generated transactions flushed to disk")
+	defer lg.WithField("quantity", amount).Info("flushing transactions to disk")
 	defer appender.Close()
 
 	transactions := make([]uuid.UUID, amount)
@@ -178,19 +229,26 @@ func generateTransactions(ctx context.Context, lg *logrus.Logger, conn driver.Co
 		); err != nil {
 			return nil, fmt.Errorf("failed to append transaction row: %w", err)
 		}
-		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_TRANSACTIONS, i+1)
+		g.stats.transactions++
+		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_TRANSACTIONS, g.stats.transactions)
 	}
 
 	return transactions, nil
 }
 
-func generateTransactionLines(ctx context.Context, lg *logrus.Logger, conn driver.Conn, merchant uuid.UUID, products, transactions []uuid.UUID, amount int) error {
+func (g *gen) lines(ctx context.Context, lg *logrus.Logger, merchant uuid.UUID, products, transactions []uuid.UUID, amount int) error {
+	conn, err := g.connector.Connect(ctx)
+	if err != nil {
+		return fmt.Errorf("could not connect: %w", err)
+	}
+	defer conn.Close()
+
 	appender, err := duckdb.NewAppenderFromConn(conn, "", "transaction_lines")
 	if err != nil {
 		return fmt.Errorf("failed to establish appender for transaction lines: %w", err)
 	}
-	defer lg.WithField("quantity", amount).Debug("generated transaction lines flushed to disk")
 	defer appender.Close()
+	defer lg.WithField("quantity", amount).Info("flushing transaction lines disk")
 
 	for i := 0; i < amount; i++ {
 		if err := appender.AppendRow(
@@ -201,7 +259,8 @@ func generateTransactionLines(ctx context.Context, lg *logrus.Logger, conn drive
 		); err != nil {
 			return fmt.Errorf("failed to append transaction line row: %w", err)
 		}
-		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_TRANSACTION_LINES, i+1)
+		g.stats.lines++
+		diagnostics.DiagnosticsFromContext(ctx).Set(DIAGNOSTIC_GENERATED_TRANSACTION_LINES, g.stats.lines)
 	}
 
 	return nil
