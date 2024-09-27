@@ -237,6 +237,10 @@ func (g *gen) transactions(ctx context.Context, lg *logrus.Logger, merchant uuid
 }
 
 func (g *gen) lines(ctx context.Context, lg *logrus.Logger, merchant uuid.UUID, products, transactions []uuid.UUID, amount int) error {
+  if len(products) == 0 || len(transactions) == 0 {
+    return nil
+  }
+
 	conn, err := g.connector.Connect(ctx)
 	if err != nil {
 		return fmt.Errorf("could not connect: %w", err)

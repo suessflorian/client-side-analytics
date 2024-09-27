@@ -31,11 +31,17 @@ func main() {
 		lg.WithError(err).Fatal("failed to initialise data generator")
 	}
 
-	go func() {
-		if err = g.create(ctx, lg, 1); err != nil {
-			lg.WithError(err).Fatal("failed to generate products")
+	http.HandleFunc("/gen", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusBadRequest)
 		}
-	}()
+		if err := g.create(ctx, lg, 1); err != nil {
+			lg.WithError(err).Error("failed to generate artefacts")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 
 	http.Handle("/", http.FileServer(http.Dir("./static")))
 	http.HandleFunc("/diagnostics", d.MetricsHandler)

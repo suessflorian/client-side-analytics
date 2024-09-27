@@ -3,16 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link
-      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
-      rel="stylesheet"
-    />
+    <script src="https://cdn.tailwindcss.com"></script>
     <title>Welcome</title>
   </head>
   <script src="http://localhost:8080/script.js" defer></script>
   <body class="h-screen flex items-center justify-center relative">
     <div class="flex flex-col items-start">
       <h1 class="font-bold text-4xl">Welcome</h1>
+      <button
+        id="generate-button"
+        class="mt-4 px-4 py-2 rounded hover:bg-gray-100 transition-all duration-300 w-full"
+      >
+        Make A Merchant
+      </button>
     </div>
 
     <div id="diagnostics" class="absolute bottom-0 left-0 p-4 text-sm">

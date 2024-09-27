@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const diagnostics = document.getElementById("diagnostic-data");
+
   const pollDiagnostics = async () => {
     const response = await fetch("/diagnostics");
     if (response.ok) {
@@ -30,6 +31,27 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("error fetching diagnostics data");
     }
   };
+
+  const generateButton = document.getElementById("generate-button");
+  generateButton.addEventListener("click", async () => {
+    console.log("hello");
+    generateButton.classList.add("opacity-50", "pointer-events-none");
+    try {
+      const response = await fetch("/gen", {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        console.log("Post request successful");
+      } else {
+        console.error("Post request failed");
+      }
+    } catch (error) {
+      console.error("Error sending post request:", error);
+    } finally {
+      generateButton.classList.remove("opacity-50", "pointer-events-none");
+    }
+  });
 
   setInterval(pollDiagnostics, 1000);
 });
