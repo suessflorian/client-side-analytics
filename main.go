@@ -31,7 +31,7 @@ func main() {
 		lg.WithError(err).Fatal("failed to initialise data generator")
 	}
 
-	http.HandleFunc("/gen", func(w http.ResponseWriter, r *http.Request) {
+	http.Handle("/gen", rateLimit(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusBadRequest)
 		}
@@ -41,7 +41,7 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-	})
+	}))
 
 	http.Handle("/", http.FileServer(http.Dir("./static")))
 	http.HandleFunc("/diagnostics", d.MetricsHandler)
