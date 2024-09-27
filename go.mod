@@ -1,6 +1,6 @@
 module github.com/suessflorian/client-side-analytics
 
-go 1.21.6
+go 1.23.1
 
 require (
 	github.com/google/uuid v1.6.0

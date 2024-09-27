@@ -2,24 +2,29 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/suessflorian/client-side-analytics/diagnostics"
+	"github.com/suessflorian/client-side-analytics/middleware"
 	"github.com/suessflorian/client-side-analytics/store/duckdb"
+	"github.com/suessflorian/client-side-analytics/telemetry"
 )
 
 func main() {
 	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
+	defer cancel()
+
 	lg := logrus.New()
 	lg.SetLevel(logrus.InfoLevel)
 	lg.SetFormatter(&logrus.JSONFormatter{})
 
-	d := diagnostics.Begin(ctx, lg)
-	ctx = diagnostics.ContextWithDiagnostics(ctx, d)
+	engine, reporter := telemetry.New(ctx, lg)
 
 	connector, err := duckdb.Init(ctx, lg, "duck.db")
 	if err != nil {
@@ -27,42 +32,54 @@ func main() {
 	}
 	defer connector.Close()
 
-	g, err := newGenerator(ctx, connector)
+	generator, err := newMerchantGenerator(ctx, reporter, connector)
 	if err != nil {
-		lg.WithError(err).Fatal("failed to initialise data generator")
+		lg.WithError(err).Fatal("failed to initialise merchant generator")
 	}
 
-	http.Handle("/gen", rateLimit(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusBadRequest)
-		}
-		generated, err := g.create(ctx, lg, 1)
+	mux := http.NewServeMux()
+	h := &handler{generator: generator}
+
+	var register = func(pattern string, handler http.HandlerFunc) {
+		mux.HandleFunc(pattern, middleware.WithContextUtils(handler, lg, reporter))
+	}
+
+	register("POST /generate", middleware.WithLimitOneAtATime(h.GenerateHandler))
+	register("GET /telemetry", engine.ServeHTTP)
+	register("/", http.FileServer(http.Dir("./static")).ServeHTTP)
+
+	server := http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	go func() {
+		address, err := getLANIPAddress()
 		if err != nil {
-			lg.WithError(err).Error("failed to generate artefacts")
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(generated)
-	}))
-
-	http.Handle("/", http.FileServer(http.Dir("./static")))
-	http.HandleFunc("/diagnostics", d.MetricsHandler)
-
-	address, err := getLANIPAddress()
-	if err != nil {
-		if errors.Is(err, ErrNoLANIPAddressFound) {
-			lg.Info("no local ip address found", address)
+			if errors.Is(err, ErrNoLANIPAddressFound) {
+				lg.Info("no local ip address found", address)
+			} else {
+				lg.WithError(err).Error("failed to get LAN IP address")
+			}
 		} else {
-			lg.WithError(err).Error("failed to get LAN IP address")
+			lg.Infof("⚡️ listening on http://%s:8080 ⚡️", address)
 		}
-	} else {
-		lg.Infof("⚡️ listening on http://%s:8080 ⚡️", address)
-	}
 
-	lg.Info("⚡️ listening on http://localhost:8080 ⚡️")
-	if err = http.ListenAndServe(":8080", nil); err != nil {
-		lg.WithError(err).Info("error starting localhost server")
+		lg.Info("⚡️ listening on http://localhost:8080 ⚡️")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			lg.WithError(err).Info("error starting localhost server")
+		}
+	}()
+
+	<-ctx.Done()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := server.Close(); err != nil {
+		lg.WithError(err).Error("failed to gracefully shutdown http server")
+	}
+	if err := engine.Close(shutdownCtx); err != nil {
+		lg.WithError(err).Error("failed to gracefully shutdown telemetry engine")
 	}
 }
 

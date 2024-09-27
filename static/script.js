@@ -1,11 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const diagnostics = document.getElementById("diagnostic-data");
+  const telemetry = document.getElementById("telemetry-data");
 
-  const pollDiagnostics = async () => {
-    const response = await fetch("/diagnostics");
+  const pollTelemetry = async () => {
+    const response = await fetch("/telemetry");
     if (response.ok) {
       const data = await response.json();
-      diagnostics.innerHTML = "";
+      telemetry.innerHTML = "";
 
       for (const [key, value] of Object.entries(data)) {
         const latest = value[value.length - 1];
@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
             break;
         }
 
-        diagnostics.appendChild(p);
+        telemetry.appendChild(p);
       }
     } else {
       console.error("error fetching diagnostics data");
@@ -37,7 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("hello");
     generateButton.classList.add("opacity-50", "pointer-events-none");
     try {
-      const response = await fetch("/gen", {
+      const response = await fetch("/generate", {
         method: "POST",
       });
 
@@ -53,5 +53,5 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  setInterval(pollDiagnostics, 1000);
+  setInterval(pollTelemetry, 1000);
 });

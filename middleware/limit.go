@@ -1,4 +1,4 @@
-package main
+package middleware
 
 import (
 	"net"
@@ -6,14 +6,16 @@ import (
 	"sync"
 )
 
-var locks sync.Map
+// WithLimitOneAtATime ensures that every client can have one active request fullfilled
+// at any given time. We 429 the client on attempted concurrent request.
+func WithLimitOneAtATime(next http.HandlerFunc) http.HandlerFunc {
+	var locks sync.Map
 
-func rateLimit(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
-      w.WriteHeader(http.StatusInternalServerError)
-      return
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 		loaded, _ := locks.LoadOrStore(ip, new(sync.Mutex))
 		lock := loaded.(*sync.Mutex)
