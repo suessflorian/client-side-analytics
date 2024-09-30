@@ -38,13 +38,14 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	h := &handler{generator: generator}
+	h := &handler{generator: generator, analytics: &analytics{connector}}
 
 	var register = func(pattern string, handler http.HandlerFunc) {
 		mux.HandleFunc(pattern, middleware.WithContextUtils(handler, lg, reporter))
 	}
 
-	register("POST /generate", middleware.WithLimitOneAtATime(h.GenerateHandler))
+	register("POST /generate", middleware.WithLimitOneAtATime(h.generateHandler))
+	register("GET /analytics/{merchant_id}", h.analyticsHandler)
 	register("GET /telemetry", engine.ServeHTTP)
 	register("/", http.FileServer(http.Dir("./static")).ServeHTTP)
 
