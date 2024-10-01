@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -50,8 +49,29 @@ func (h *handler) analyticsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(top)
 	if err != nil {
-		log.Printf("failed to marshal response: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		lg(ctx).WithError(err).Error("failed to marshal top products")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *handler) loaderHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	merchantID, err := uuid.Parse(r.PathValue("merchant_id"))
+	if err != nil {
+		lg(ctx).Error("invalid merchant_id uuid")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", "attachment;filename=data.zip")
+
+	err = h.analytics.csvDump(ctx, w, merchantID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		lg(ctx).WithError(err).Error("failed to dump data")
 		return
 	}
 }
