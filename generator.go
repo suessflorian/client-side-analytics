@@ -33,7 +33,7 @@ type generated struct {
 	Lines        int
 }
 
-func newMerchantGenerator(ctx context.Context, reporter *telemetry.Reporter, connector *duckdb.Connector) (*generator, error) {
+func newMerchantGenerator(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, connector *duckdb.Connector) (*generator, error) {
 	g := &generator{connector: connector}
 
 	for table, count := range map[string]*int{
@@ -53,6 +53,8 @@ func newMerchantGenerator(ctx context.Context, reporter *telemetry.Reporter, con
 	reporter.Set(DIAGNOSTIC_TOTAL_TRANSACTIONS, g.overall.Transactions)
 	reporter.Set(DIAGNOSTIC_TOTAL_TRANSACTION_LINES, g.overall.Lines)
 
+
+	lg.Info("generator idle")
 	return g, nil
 }
 

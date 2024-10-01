@@ -32,7 +32,7 @@ func main() {
 	}
 	defer connector.Close()
 
-	generator, err := newMerchantGenerator(ctx, reporter, connector)
+	generator, err := newMerchantGenerator(ctx, lg, reporter, connector)
 	if err != nil {
 		lg.WithError(err).Fatal("failed to initialise merchant generator")
 	}
