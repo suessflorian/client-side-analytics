@@ -48,14 +48,27 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const generateButton = document.getElementById("generate-button");
+  const merchantList = document.getElementById("merchant-list");
   generateButton.addEventListener("click", async () => {
     generateButton.classList.add("opacity-50", "pointer-events-none");
     try {
-      await fetch("/generate", {
+      const response = await fetch("/generate", {
         method: "POST",
       });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        data.Merchants.forEach((merchant) => {
+          const p = document.createElement("p");
+          p.textContent = merchant.Name;
+          merchantList.appendChild(p);
+        });
+      } else {
+        console.error("Error in response from /generate:", response.statusText);
+      }
     } catch (error) {
-      console.error("error sending post request:", error);
+      console.error("Error sending POST request:", error);
     } finally {
       generateButton.classList.remove("opacity-50", "pointer-events-none");
     }
