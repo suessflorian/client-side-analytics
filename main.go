@@ -44,7 +44,7 @@ func main() {
 		mux.HandleFunc(pattern, middleware.WithContextUtils(handler, lg, reporter))
 	}
 
-	register("POST /generate", middleware.WithLimitOneAtATime(h.generateHandler))
+	register("POST /generate", h.generateHandler) // middleware.WithLimitOneAtATime
 	register("GET /analytics/{merchant_id}", middleware.Delay(h.analyticsHandler))
 	register("GET /loader/{merchant_id}", middleware.WithLimitOneAtATime(h.loaderHandler))
 	register("GET /telemetry", engine.ServeHTTP)

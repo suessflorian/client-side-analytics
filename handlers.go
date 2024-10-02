@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"math/rand"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -18,7 +19,7 @@ type handler struct {
 
 func (h *handler) generateHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	generated, err := h.generator.create(ctx, lg(ctx), reporter(ctx), 1)
+	generated, err := h.generator.create(ctx, lg(ctx), reporter(ctx), rand.Int()%10)
 	if err != nil {
 		lg(ctx).WithError(err).Error("failed to generate artefacts")
 		w.WriteHeader(http.StatusInternalServerError)

@@ -19,7 +19,10 @@ self.addEventListener("message", async (event) => {
     try {
       const response = await fetch(`/loader/${merchantID}`);
       if (!response.ok) {
-        postMessage({ action: "error", message: "response not OK when loading merchant" });
+        postMessage({
+          action: "error",
+          message: "response not OK when loading merchant",
+        });
         return;
       }
 
