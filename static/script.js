@@ -1,17 +1,20 @@
+let currentDownloadMerchantID = null;
+
 document.addEventListener("DOMContentLoaded", () => {
   const telemetry = document.getElementById("telemetry-data");
+  const merchantList = document.getElementById("merchant-list");
+  const generateButton = document.getElementById("generate-button");
 
   const worker = new Worker("service-worker.js"); // should technically check Worker API exists
+
   worker.addEventListener("message", (event) => {
-    const { action, buffer, message } = event.data;
+    const { action, buffer, message, merchantID } = event.data;
     switch (action) {
       case "db-ready":
-        initDbFromWorker(buffer);
-        loadMerchantButton.classList.remove(
-          "opacity-50",
-          "pointer-events-none",
-        );
+        initDbFromWorker(buffer, merchantID);
+        restoreDownloadIcons();
         break;
+
       case "error":
         console.error(message);
         break;
@@ -47,8 +50,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const generateButton = document.getElementById("generate-button");
-  const merchantList = document.getElementById("merchant-list");
   generateButton.addEventListener("click", async () => {
     generateButton.classList.add("opacity-50", "pointer-events-none");
     try {
@@ -58,36 +59,83 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (response.ok) {
         const data = await response.json();
-
         data.Merchants.forEach((merchant) => {
           const p = document.createElement("p");
-          p.textContent = merchant.Name;
+          p.classList.add("flex", "items-center", "mb-2");
+          p.dataset.merchantId = merchant.ID.toString();
+
+          const span = document.createElement("span");
+          span.textContent = merchant.Name;
+
+          p.appendChild(span);
+
+          const icon = downloadIcon(merchant.ID.toString());
+          icon.addEventListener("click", () => {
+            const merchantID = merchant.ID.toString();
+            currentDownloadMerchantID = merchantID;
+            icon.classList.add("hidden");
+            restoreDownloadIcons();
+            worker.postMessage({ action: "download", merchantID: merchant.ID });
+          });
+
+          p.appendChild(icon);
+
           merchantList.appendChild(p);
         });
       } else {
-        console.error("Error in response from /generate:", response.statusText);
+        console.error("error in response from /generate:", response.statusText);
       }
     } catch (error) {
-      console.error("Error sending POST request:", error);
+      console.error("error sending POST request:", error);
     } finally {
       generateButton.classList.remove("opacity-50", "pointer-events-none");
     }
   });
 
-  const loadMerchantButton = document.getElementById("load-merchant-button");
-  loadMerchantButton.addEventListener("click", () => {
-    loadMerchantButton.classList.add("opacity-50", "pointer-events-none");
-    worker.postMessage({ merchantID: "d773d571-7fce-4aa6-ad04-05e37a93fb26" });
-  });
-
   setInterval(pollTelemetry, 1000);
 });
 
-const initDbFromWorker = async (buffer) => {
+function restoreDownloadIcons() {
+  document.querySelectorAll(".download-icon").forEach((iconElement) => {
+    const iconMerchantId = iconElement.dataset.merchantId;
+    if (iconMerchantId !== currentDownloadMerchantID) {
+      iconElement.classList.remove("hidden");
+    }
+  });
+}
+
+// downloadIcon DOM API builds an icon listed over here https://heroicons.com/
+const downloadIcon = (merchantId) => {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  icon.setAttribute("fill", "none");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("stroke-width", "2.5");
+  icon.setAttribute("stroke", "currentColor");
+  icon.classList.add(
+    "download-icon",
+    "size-6",
+    "mr-2",
+    "cursor-pointer",
+    "w-4",
+    "h-4",
+  );
+  icon.dataset.merchantId = merchantId;
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  path.setAttribute("d", "M19.5 8.25L12 15.75 4.5 8.25");
+
+  icon.appendChild(path);
+  return icon;
+};
+
+const initDbFromWorker = async (buffer, merchantID) => {
   const SQL = await window.initSqlJs({
     locateFile: (file) => `https://sql.js.org/dist/${file}`,
   });
   db = new SQL.Database(new Uint8Array(buffer));
   window.db = db;
-  console.info("database loaded from worker and ready to use - see window.db");
+  console.info(`database loaded for ${merchantID} - see window.db`);
 };
