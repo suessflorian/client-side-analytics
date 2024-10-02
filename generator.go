@@ -59,8 +59,6 @@ func newMerchantGenerator(ctx context.Context, lg *logrus.Logger, reporter *tele
 }
 
 func (g *generator) create(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, amount int) (generated, error) {
-	lg.Info("generator running")
-
 	merchants, err := g.merchants(ctx, lg, reporter, amount)
 	if err != nil {
 		return generated{}, err
@@ -90,7 +88,6 @@ func (g *generator) create(ctx context.Context, lg *logrus.Logger, reporter *tel
 		res.Lines += len(lines)
 	}
 
-	lg.Info("generator idle")
 	return res, err
 }
 

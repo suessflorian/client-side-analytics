@@ -19,6 +19,7 @@ type handler struct {
 func (h *handler) generateHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// TODO: return merchant id
 	generated, err := h.generator.create(ctx, lg(ctx), reporter(ctx), 1)
 	if err != nil {
 		lg(ctx).WithError(err).Error("failed to generate artefacts")
@@ -27,6 +28,8 @@ func (h *handler) generateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(generated)
+
+	lg(ctx).Info("generated merchant data")
 }
 
 func (h *handler) analyticsHandler(w http.ResponseWriter, r *http.Request) {
@@ -38,10 +41,11 @@ func (h *handler) analyticsHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	lg := lg(ctx).WithField("merchant", merchantID)
 
 	top, err := h.analytics.GetTopProducts(ctx, merchantID)
 	if err != nil {
-		lg(ctx).WithError(err).Error("failed to get top products")
+		lg.WithError(err).Error("failed to get top products")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -49,10 +53,12 @@ func (h *handler) analyticsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(top)
 	if err != nil {
-		lg(ctx).WithError(err).Error("failed to marshal top products")
+		lg.WithError(err).Error("failed to marshal top products")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	lg.Info("served merchant analytics")
 }
 
 func (h *handler) loaderHandler(w http.ResponseWriter, r *http.Request) {
@@ -64,16 +70,20 @@ func (h *handler) loaderHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	lg := lg(ctx).WithField("merchant", merchantID)
 
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", "attachment;filename=data.zip")
 
+	lg.Info("streaming merchant data")
 	err = h.analytics.csvDump(ctx, w, merchantID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		lg(ctx).WithError(err).Error("failed to dump data")
+		lg.WithError(err).Error("failed to dump data")
 		return
 	}
+
+	lg.Info("streaming finished streaming")
 }
 
 func lg(ctx context.Context) *logrus.Logger {

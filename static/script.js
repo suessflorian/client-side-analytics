@@ -76,5 +76,5 @@ const initDbFromWorker = async (buffer) => {
   });
   db = new SQL.Database(new Uint8Array(buffer));
   window.db = db;
-  console.info("Database loaded from worker and ready to use - see window.db");
+  console.info("database loaded from worker and ready to use - see window.db");
 };

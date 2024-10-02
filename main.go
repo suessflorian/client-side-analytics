@@ -46,7 +46,7 @@ func main() {
 
 	register("POST /generate", middleware.WithLimitOneAtATime(h.generateHandler))
 	register("GET /analytics/{merchant_id}", h.analyticsHandler)
-	register("GET /loader/{merchant_id}", h.loaderHandler)
+	register("GET /loader/{merchant_id}", middleware.WithLimitOneAtATime(h.loaderHandler))
 	register("GET /telemetry", engine.ServeHTTP)
 	register("/", http.FileServer(http.Dir("./static")).ServeHTTP)
 
