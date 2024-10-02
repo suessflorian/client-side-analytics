@@ -18,8 +18,6 @@ type handler struct {
 
 func (h *handler) generateHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	// TODO: return merchant id
 	generated, err := h.generator.create(ctx, lg(ctx), reporter(ctx), 1)
 	if err != nil {
 		lg(ctx).WithError(err).Error("failed to generate artefacts")

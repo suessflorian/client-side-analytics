@@ -22,15 +22,27 @@ const (
 
 type generator struct {
 	// overall keeps track of how many different entities exist overall.
-	overall   generated
+	overall   counts
 	connector *duckdb.Connector
 }
 
-type generated struct {
+type counts struct {
 	Merchants    int
 	Products     int
 	Transactions int
 	Lines        int
+}
+
+type generated struct {
+	Merchants    []Merchant
+	Products     int
+	Transactions int
+	Lines        int
+}
+
+type Merchant struct {
+	ID   uuid.UUID
+	Name string
 }
 
 func newMerchantGenerator(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, connector *duckdb.Connector) (*generator, error) {
@@ -53,7 +65,6 @@ func newMerchantGenerator(ctx context.Context, lg *logrus.Logger, reporter *tele
 	reporter.Set(DIAGNOSTIC_TOTAL_TRANSACTIONS, g.overall.Transactions)
 	reporter.Set(DIAGNOSTIC_TOTAL_TRANSACTION_LINES, g.overall.Lines)
 
-
 	lg.Info("generator idle")
 	return g, nil
 }
@@ -65,23 +76,23 @@ func (g *generator) create(ctx context.Context, lg *logrus.Logger, reporter *tel
 	}
 
 	var res = generated{
-		Merchants: len(merchants),
+		Merchants: merchants,
 	}
 
 	for _, merchant := range merchants {
-		products, err := g.products(ctx, lg, reporter, merchant, rand.Int()%100)
+		products, err := g.products(ctx, lg, reporter, merchant.ID, rand.Int()%100)
 		if err != nil {
 			return res, err
 		}
 		res.Products += len(products)
 
-		transactions, err := g.transactions(ctx, lg, reporter, merchant, rand.Int()%10_000)
+		transactions, err := g.transactions(ctx, lg, reporter, merchant.ID, rand.Int()%100_000)
 		if err != nil {
 			return res, err
 		}
 		res.Transactions += len(transactions)
 
-		lines, err := g.lines(ctx, lg, reporter, merchant, products, transactions, len(transactions)*7)
+		lines, err := g.lines(ctx, lg, reporter, merchant.ID, products, transactions, len(transactions)*7)
 		if err != nil {
 			return res, err
 		}
@@ -91,7 +102,7 @@ func (g *generator) create(ctx context.Context, lg *logrus.Logger, reporter *tel
 	return res, err
 }
 
-func (g *generator) merchants(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, amount int) ([]uuid.UUID, error) {
+func (g *generator) merchants(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, amount int) ([]Merchant, error) {
 	conn, err := g.connector.Connect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect: %w", err)
@@ -141,12 +152,13 @@ func (g *generator) merchants(ctx context.Context, lg *logrus.Logger, reporter *
 		"Group",
 	}
 
-	merchants := make([]uuid.UUID, amount)
+	merchants := make([]Merchant, amount)
 	for i := 0; i < amount; i++ {
-		merchants[i] = uuid.New()
+		merchants[i].ID = uuid.New()
+		merchants[i].Name = names[rand.Int()%len(names)] + names[rand.Int()%len(names)] + " " + postfixes[rand.Int()%len(postfixes)]
 		if err := appender.AppendRow(
-			duckdb.UUID(merchants[i]),
-			names[rand.Int()%len(names)]+names[rand.Int()%len(names)]+" "+postfixes[rand.Int()%len(postfixes)],
+			duckdb.UUID(merchants[i].ID),
+			merchants[i].Name,
 		); err != nil {
 			return nil, fmt.Errorf("failed to append merchant row: %w", err)
 		}
@@ -157,7 +169,7 @@ func (g *generator) merchants(ctx context.Context, lg *logrus.Logger, reporter *
 	return merchants, nil
 }
 
-func (g *generator) products(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, merchant uuid.UUID, amount int) ([]uuid.UUID, error) {
+func (g *generator) products(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, merchantID uuid.UUID, amount int) ([]uuid.UUID, error) {
 	conn, err := g.connector.Connect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect: %w", err)
@@ -196,12 +208,12 @@ func (g *generator) products(ctx context.Context, lg *logrus.Logger, reporter *t
 
 	products := make([]uuid.UUID, amount)
 	for i := 0; i < amount; i++ {
-		products[i] = uuid.Must(uuid.NewV7())
+		products[i] = uuid.Must(uuid.NewRandom())
 		if err := appender.AppendRow(
 			duckdb.UUID(products[i]),
 			names[rand.Int()%len(names)]+" "+names[rand.Int()%len(names)],
 			rand.Int31()%10_000+100,
-			duckdb.UUID(merchant),
+			duckdb.UUID(merchantID),
 		); err != nil {
 			return nil, fmt.Errorf("failed to append product row: %w", err)
 		}
@@ -212,7 +224,7 @@ func (g *generator) products(ctx context.Context, lg *logrus.Logger, reporter *t
 	return products, nil
 }
 
-func (g *generator) transactions(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, merchant uuid.UUID, amount int) ([]uuid.UUID, error) {
+func (g *generator) transactions(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, merchantID uuid.UUID, amount int) ([]uuid.UUID, error) {
 	conn, err := g.connector.Connect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect: %w", err)
@@ -229,11 +241,11 @@ func (g *generator) transactions(ctx context.Context, lg *logrus.Logger, reporte
 	transactions := make([]uuid.UUID, amount)
 	now := time.Now()
 	for i := 0; i < amount; i++ {
-		transactions[i] = uuid.Must(uuid.NewV7())
+		transactions[i] = uuid.Must(uuid.NewRandom())
 		if err := appender.AppendRow(
 			duckdb.UUID(transactions[i]),
 			now.Add(-time.Duration(rand.Int())*time.Hour),
-			duckdb.UUID(merchant),
+			duckdb.UUID(merchantID),
 		); err != nil {
 			return nil, fmt.Errorf("failed to append transaction row: %w", err)
 		}
@@ -244,7 +256,7 @@ func (g *generator) transactions(ctx context.Context, lg *logrus.Logger, reporte
 	return transactions, nil
 }
 
-func (g *generator) lines(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, merchant uuid.UUID, products, transactions []uuid.UUID, amount int) ([]uuid.UUID, error) {
+func (g *generator) lines(ctx context.Context, lg *logrus.Logger, reporter *telemetry.Reporter, merchantID uuid.UUID, products, transactions []uuid.UUID, amount int) ([]uuid.UUID, error) {
 	if len(products) == 0 || len(transactions) == 0 {
 		return nil, nil
 	}
@@ -260,17 +272,17 @@ func (g *generator) lines(ctx context.Context, lg *logrus.Logger, reporter *tele
 		return nil, fmt.Errorf("failed to establish appender for transaction lines: %w", err)
 	}
 	defer appender.Close()
-	defer lg.WithField("quantity", amount).Info("flushing transaction lines disk")
+	defer lg.WithField("quantity", amount).Info("flushing transaction lines to disk")
 
 	lines := make([]uuid.UUID, amount)
 	for i := 0; i < amount; i++ {
-		lines[i] = uuid.Must(uuid.NewV7())
+		lines[i] = uuid.Must(uuid.NewRandom())
 		if err := appender.AppendRow(
 			duckdb.UUID(lines[i]),
 			duckdb.UUID(transactions[rand.Int()%len(transactions)]),
 			duckdb.UUID(products[rand.Int()%len(products)]),
 			int32(rand.Int()%13),
-			duckdb.UUID(merchant),
+			duckdb.UUID(merchantID),
 		); err != nil {
 			return nil, fmt.Errorf("failed to append transaction line row: %w", err)
 		}
